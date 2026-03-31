@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>哈丸x地球星</title>
+  <meta property="og:title" content="哈丸x地球星">
+<meta property="og:description" content="demo">
+<meta property="og:image" content="https://files.catbox.moe/yoicux.jpg">
+<meta property="og:type" content="website">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #0a0a0f;
+      overflow: hidden;
+      font-family: 'Orbitron', sans-serif;
+      position: relative;
+    }
+
+    canvas#particles {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 255, 0.015) 2px,
+        rgba(0, 255, 255, 0.015) 4px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .grid-floor {
+      position: fixed;
+      bottom: 0; left: 50%;
+      transform: translateX(-50%) perspective(500px) rotateX(60deg);
+      width: 200vw; height: 60vh;
+      background-image:
+        linear-gradient(rgba(0,255,255,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,255,0.07) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: gridScroll 4s linear infinite;
+      z-index: 0;
+      pointer-events: none;
+    }
+    @keyframes gridScroll {
+      0% { background-position: 0 0; }
+      100% { background-position: 0 60px; }
+    }
+
+    .container {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 40px;
+      flex-wrap: wrap;
+      padding: 40px;
+      max-width: 900px;
+    }
+
+    .x-element {
+      width: 130px;
+      height: 130px;
+      border: 2px solid rgba(0, 255, 255, 0.6);
+      border-radius: 22px;
+      background: rgba(0, 10, 20, 0.8);
+      overflow: hidden;
+      text-decoration: none;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      transition: transform 0.1s ease-out, box-shadow 0.3s, border-color 0.3s;
+      -webkit-tap-highlight-color: transparent;
+      opacity: 0;
+      transform: translateY(80px) scale(0.3) rotateY(90deg);
+      animation: none;
+    }
+
+    .x-element::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: -2px;
+      right: -2px; bottom: -2px;
+      border-radius: 22px;
+      background: conic-gradient(
+        from var(--angle, 0deg),
+        transparent 0%,
+        #00ffff 10%,
+        #ff3366 20%,
+        #00ffff 30%,
+        transparent 40%
+      );
+      z-index: -1;
+      animation: rotateBorder 3s linear infinite;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    .x-element:hover::before {
+      opacity: 1;
+    }
+    @property --angle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes rotateBorder {
+      to { --angle: 360deg; }
+    }
+
+    .x-element::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 0; height: 0;
+      background: radial-gradient(circle, rgba(0,255,255,0.3), transparent 70%);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      transition: width 0.5s, height 0.5s;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .x-element:hover::after {
+      width: 200%; height: 200%;
+    }
+
+    .x-element img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      pointer-events: none;
+      transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), filter 0.5s;
+      position: relative;
+      z-index: 2;
+    }
+    .x-element:hover img {
+      transform: scale(1.15);
+      filter: brightness(1.2) saturate(1.3);
+    }
+
+    /* 轉場遮罩 */
+    .transition-overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: radial-gradient(circle at var(--cx, 50%) var(--cy, 50%), rgba(0,255,255,0.3), #0a0a0f 70%);
+      z-index: 9998;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease-in;
+    }
+    .transition-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* 被點擊的卡片：移動到中央並放大 */
+    .x-element.navigating {
+      z-index: 10000 !important;
+      animation: none !important;
+      transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s 0.7s ease-out !important;
+      border-color: #00ffff !important;
+      box-shadow:
+        0 0 30px rgba(0,255,255,0.6),
+        0 0 60px rgba(0,255,255,0.3),
+        inset 0 0 20px rgba(0,255,255,0.2) !important;
+    }
+    .x-element.navigating.fade-out {
+      opacity: 0 !important;
+    }
+
+    /* 其他卡片收起 */
+    .x-element.scatter {
+      animation: none !important;
+      transition: transform 0.5s cubic-bezier(0.55, 0, 1, 0.45), opacity 0.4s ease-in !important;
+      transform: scale(0) rotate(20deg) !important;
+      opacity: 0 !important;
+    }
+
+    @keyframes cardEntrance {
+      0% {
+        opacity: 0;
+        transform: translateY(100px) scale(0.2) rotateY(180deg);
+        filter: blur(20px);
+      }
+      50% {
+        opacity: 0.8;
+        transform: translateY(-20px) scale(1.1) rotateY(-10deg);
+        filter: blur(2px);
+      }
+      70% {
+        transform: translateY(10px) scale(0.95) rotateY(5deg);
+        filter: blur(0px);
+      }
+      85% {
+        transform: translateY(-5px) scale(1.02) rotateY(-2deg);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1) rotateY(0deg);
+        filter: blur(0px);
+      }
+    }
+
+    .x-element.entered {
+      animation: cardEntrance 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-8px); }
+    }
+    .x-element.idle {
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .x-element:hover {
+      border-color: #00ffff;
+      box-shadow:
+        0 0 20px rgba(0, 255, 255, 0.5),
+        0 0 40px rgba(0, 255, 255, 0.2),
+        0 0 80px rgba(0, 255, 255, 0.1),
+        inset 0 0 20px rgba(0, 255, 255, 0.1);
+    }
+
+    .x-element.active {
+      transform: scale(0.8) !important;
+      border-color: #ff3366 !important;
+      box-shadow:
+        0 0 30px #ff3366,
+        0 0 60px rgba(255, 51, 102, 0.4),
+        inset 0 0 20px rgba(255, 51, 102, 0.3) !important;
+      animation: none !important;
+    }
+    .x-element.active img {
+      filter: hue-rotate(30deg) brightness(1.3);
+    }
+
+    .x-element.snap-back {
+      transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .ripple-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .ripple {
+      position: absolute;
+      border: 2px solid rgba(0, 255, 255, 0.6);
+      border-radius: 50%;
+      animation: rippleExpand 0.8s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes rippleExpand {
+      0% { width: 0; height: 0; opacity: 1; }
+      100% { width: 200px; height: 200px; opacity: 0; }
+    }
+
+    /* 標題：初始隱藏，避免 loading 時閃到錯誤位置 */
+    .title {
+      position: fixed;
+      top: 30px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #00ffff;
+      font-size: 1.2rem;
+      font-weight: 900;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      z-index: 50;
+      opacity: 0;
+      visibility: hidden;
+      text-shadow: 0 0 20px rgba(0,255,255,0.5), 0 0 40px rgba(0,255,255,0.2);
+      white-space: nowrap;
+    }
+    .title.animate {
+      visibility: visible;
+      animation: titleIn 1.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+    @keyframes titleIn {
+      0% { opacity: 0; transform: translateY(-30px); letter-spacing: 30px; }
+      100% { opacity: 1; transform: translateY(0); letter-spacing: 8px; }
+    }
+
+    .bottom-line {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #00ffff, #ff3366, #00ffff, transparent);
+      z-index: 50;
+      animation: lineExpand 1.5s 1.5s ease-out forwards;
+    }
+    @keyframes lineExpand {
+      to { width: 60%; }
+    }
+
+    .corner {
+      position: fixed;
+      width: 40px; height: 40px;
+      z-index: 50;
+      opacity: 0;
+      animation: cornerIn 0.5s 2s ease-out forwards;
+    }
+    .corner::before, .corner::after {
+      content: '';
+      position: absolute;
+      background: #00ffff;
+    }
+    .corner-tl { top: 20px; left: 20px; }
+    .corner-tl::before { top: 0; left: 0; width: 20px; height: 2px; }
+    .corner-tl::after { top: 0; left: 0; width: 2px; height: 20px; }
+    .corner-tr { top: 20px; right: 20px; }
+    .corner-tr::before { top: 0; right: 0; width: 20px; height: 2px; }
+    .corner-tr::after { top: 0; right: 0; width: 2px; height: 20px; }
+    .corner-bl { bottom: 20px; left: 20px; }
+    .corner-bl::before { bottom: 0; left: 0; width: 20px; height: 2px; }
+    .corner-bl::after { bottom: 0; left: 0; width: 2px; height: 20px; }
+    .corner-br { bottom: 20px; right: 20px; }
+    .corner-br::before { bottom: 0; right: 0; width: 20px; height: 2px; }
+    .corner-br::after { bottom: 0; right: 0; width: 2px; height: 20px; }
+    @keyframes cornerIn {
+      0% { opacity: 0; transform: scale(0); }
+      100% { opacity: 0.5; transform: scale(1); }
+    }
+
+    .label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(0, 255, 255, 0.7);
+      font-size: 0.55rem;
+      letter-spacing: 2px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 10;
+      text-shadow: 0 0 10px rgba(0,255,255,0.3);
+    }
+    .x-element:hover .label {
+      opacity: 1;
+    }
+
+    .element-wrapper {
+      position: relative;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="particles"></canvas>
+  <div class="grid-floor"></div>
+
+<div class="title" id="titleEl">✦ 哈丸x地球星 ✦</div>
+
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+  <div class="transition-overlay" id="transitionOverlay"></div>
+  <div class="ripple-container" id="rippleContainer"></div>
+
+  <div class="container">
+    <div class="element-wrapper">
+      <a href="https://zh.wikipedia.org/zh-tw/%E9%82%A3%E4%BA%9B%E5%B9%B4%EF%BC%8C%E6%88%91%E5%80%91%E4%B8%80%E8%B5%B7%E8%BF%BD%E7%9A%84%E5%A5%B3%E5%AD%A9" class="x-element" data-index="0">
+        <img src="item1/bg.jpg" alt="圖片1">
+        <span class="label">WIKI</span>
+      </a>
+    </div>
+    <div class="element-wrapper">
+      <a href="https://lumegaia.com/" class="x-element" data-index="1">
+        <img src="item2/bg.jpg" alt="圖片2">
+        <span class="label">LUMEGAIA</span>
+      </a>
+    </div>
+    <div class="element-wrapper">
+      <a href="https://www.mlb.com/" class="x-element" data-index="2">
+        <img src="item3/bg.jpg" alt="圖片3">
+        <span class="label">MLB</span>
+      </a>
+    </div>
+    <div class="element-wrapper">
+      <a href="https://www.youtube.com/watch?v=oyQZg2X_cd0&disable_polymer=1" class="x-element" data-index="3">
+        <img src="item4/bg.jpg" alt="圖片4">
+        <span class="label">YOUTUBE</span>
+      </a>
+    </div>
+    <div class="element-wrapper">
+      <a href="https://www.netflix.com/tw/" class="x-element" data-index="4">
+        <img src="item5/bg.jpg" alt="圖片5">
+        <span class="label">NETFLIX</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="bottom-line"></div>
+
+  <script>
+    // ===== 初始化函式：重置所有狀態 =====
+    function initPage() {
+      isReady = false; 
+      const overlay = document.getElementById('transitionOverlay');
+      overlay.classList.remove('active');
+
+      const elements = document.querySelectorAll('.x-element');
+      elements.forEach(el => {
+        el.classList.remove('navigating', 'scatter', 'fade-out', 'entered', 'idle', 'active', 'snap-back');
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(80px) scale(0.3) rotateY(90deg)';
+        el.style.zIndex = '';
+      });
+
+      // 標題動畫：等字型載好再觸發
+      const titleEl = document.getElementById('titleEl');
+      titleEl.classList.remove('animate');
+      // 用 requestAnimationFrame 確保 DOM 已渲染
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          titleEl.classList.add('animate');
+        });
+      });
+
+      // 依序入場
+      elements.forEach((el, i) => {
+        setTimeout(() => {
+          el.classList.add('entered');
+          el.addEventListener('animationend', function handler() {
+            el.removeEventListener('animationend', handler);
+            el.classList.remove('entered');
+            el.style.opacity = '1';
+            el.style.transform = 'translateY(0) scale(1) rotateY(0)';
+            el.classList.add('idle');
+                  if (i === elements.length - 1) {
+        isReady = true;
+      }
+          });
+        }, 600 + i * 200);
+      });
+    }
+
+    // ===== 粒子背景 =====
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    const PARTICLE_COUNT = 80;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.5;
+        this.speedY = (Math.random() - 0.5) * 0.5;
+        this.opacity = Math.random() * 0.5 + 0.1;
+        this.hue = Math.random() > 0.5 ? 180 : 340;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${this.hue}, 100%, 70%, ${this.opacity})`;
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+
+    function drawLines() {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 120) {
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(0, 255, 255, ${0.08 * (1 - dist / 120)})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => { p.update(); p.draw(); });
+      drawLines();
+      requestAnimationFrame(animateParticles);
+    }
+    animateParticles();
+
+    // ===== 點擊漣漪 =====
+    const rippleContainer = document.getElementById('rippleContainer');
+    function createRipple(x, y) {
+      const ripple = document.createElement('div');
+      ripple.className = 'ripple';
+      ripple.style.left = (x - 100) + 'px';
+      ripple.style.top = (y - 100) + 'px';
+      rippleContainer.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 800);
+    }
+
+    // ===== 拖曳與點擊邏輯 =====
+    const elements = document.querySelectorAll('.x-element');
+    let isNavigating = false; // 防止轉場中重複點擊
+    let isReady = false; 
+    elements.forEach(el => {
+      let startX = 0, startY = 0;
+      let currentX = 0, currentY = 0;
+      let isDragging = false;
+      let hasMoved = false;
+
+      el.addEventListener('pointerdown', (e) => {
+if (isNavigating || !isReady) return;
+        isDragging = true;
+        hasMoved = false;
+        el.setPointerCapture(e.pointerId);
+        el.style.zIndex = '1000';
+        el.classList.remove('snap-back', 'idle');
+        el.classList.add('active');
+        startX = e.clientX - currentX;
+        startY = e.clientY - currentY;
+        const rect = el.getBoundingClientRect();
+        createRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      });
+
+      el.addEventListener('pointermove', (e) => {
+  if (!isDragging || isNavigating || !isReady) return; 
+        const moveX = e.clientX - startX;
+        const moveY = e.clientY - startY;
+        if (Math.abs(moveX) > 10 || Math.abs(moveY) > 10) {
+          hasMoved = true;
+          currentX = moveX;
+          currentY = moveY;
+          el.classList.remove('active');
+          el.style.transform = `translate(${currentX}px, ${currentY}px) scale(1.1) rotate(${currentX * 0.05}deg)`;
+        }
+      });
+
+      const endDrag = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        el.classList.remove('active');
+        if (hasMoved) {
+          currentX = 0;
+          currentY = 0;
+          el.classList.add('snap-back');
+          el.style.transform = `translate(0px, 0px) scale(1) rotate(0deg)`;
+          setTimeout(() => {
+            el.classList.remove('snap-back');
+            if (!isNavigating) el.classList.add('idle');
+          }, 600);
+        } else {
+          if (!isNavigating) {
+            el.style.transform = `scale(1)`;
+            el.classList.add('idle');
+          }
+        }
+        setTimeout(() => { if (!isNavigating) el.style.zIndex = ''; }, 600);
+      };
+
+      el.addEventListener('pointerup', endDrag);
+      el.addEventListener('pointercancel', endDrag);
+
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+         if (hasMoved || isNavigating || !isReady) return; 
+        isNavigating = true;
+
+        const targetHref = el.href;
+        const rect = el.getBoundingClientRect();
+        const elCenterX = rect.left + rect.width / 2;
+        const elCenterY = rect.top + rect.height / 2;
+
+        // 計算到畫面正中央的位移
+        const viewCenterX = window.innerWidth / 2;
+        const viewCenterY = window.innerHeight / 2;
+        const dx = viewCenterX - elCenterX;
+        const dy = viewCenterY - elCenterY;
+
+        // 遮罩光源位置
+        const cx = (elCenterX / window.innerWidth * 100).toFixed(1);
+        const cy = (elCenterY / window.innerHeight * 100).toFixed(1);
+        const overlay = document.getElementById('transitionOverlay');
+        overlay.style.setProperty('--cx', cx + '%');
+        overlay.style.setProperty('--cy', cy + '%');
+
+        // 被點擊的卡片：移到正中央並放大
+        el.classList.remove('idle', 'active');
+        el.classList.add('navigating');
+        el.style.zIndex = '10000';
+        el.style.transform = `translate(${dx}px, ${dy}px) scale(2.2)`;
+
+        // 其他卡片收起
+        elements.forEach(other => {
+          if (other !== el) {
+            other.classList.remove('idle');
+            other.classList.add('scatter');
+          }
+        });
+
+        // 遮罩亮起
+        setTimeout(() => overlay.classList.add('active'), 400);
+
+        // 卡片淡出
+        setTimeout(() => el.classList.add('fade-out'), 700);
+
+        // 導航
+        setTimeout(() => {
+          window.location.href = targetHref;
+        }, 1100);
+      });
+    });
+
+    // ===== 返回頁面時重置 =====
+    window.addEventListener('pageshow', (e) => {
+      // bfcache 或正常載入都重置
+      isNavigating = false;
+      initPage();
+    });
+  </script>
+</body>
+</html>
